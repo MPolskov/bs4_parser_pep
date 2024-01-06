@@ -7,9 +7,13 @@ import logging
 
 
 from configs import configure_argument_parser, configure_logging
-from constants import BASE_DIR, MAIN_DOC_URL
+from constants import (
+    BASE_DIR,
+    MAIN_DOC_URL,
+    PEP_URL
+)
 from outputs import control_output
-from utils import get_response, find_tag
+from utils import get_response, find_tag, find_status
 
 
 def whats_new(session):
@@ -96,10 +100,67 @@ def download(session):
     logging.info(f'Архив был загружен и сохранён: {archive_path}')
 
 
+EXPECTED_STATUS = {
+    'A': ('Active', 'Accepted'),
+    'D': ('Deferred',),
+    'F': ('Final',),
+    'P': ('Provisional',),
+    'R': ('Rejected',),
+    'S': ('Superseded',),
+    'W': ('Withdrawn',),
+    '': ('Draft', 'Active'),
+}
+
+
+def pep(session):
+    response = get_response(session, PEP_URL)
+    if response is None:
+        return
+    status_count = {}
+    soup = BeautifulSoup(response.text, 'lxml')
+    section_tag = find_tag(soup, 'section', {'id': 'index-by-category'})
+    tr_tag_list = section_tag.find_all('tr')
+    for tag in tr_tag_list:
+        short_type_status = tag.find('td')
+        if short_type_status is None:
+            continue
+        short_status = short_type_status.text[1:]
+        short_link = tag.find('a')['href']
+        full_link = urljoin(PEP_URL, short_link)
+        status = find_status(session, full_link)
+        if status not in EXPECTED_STATUS[short_status]:
+            logging.error(
+                (
+                    'Несовподающие статусы:\n'
+                    f'{full_link}\n'
+                    f'Статус в карточке: {status}\n'
+                    f'Ожижаемый статус: {EXPECTED_STATUS[short_status]}'
+                )
+            )
+        if status not in status_count.keys():
+            status_count[status] = 1
+        else:
+            status_count[status] += 1
+
+    for key, value in status_count.items():
+        logging.info(f'{key} - {value}')
+    logging.info(f'Всего PEP: {sum(status_count.values())}')
+
+
+
+
+    # logging.info(tr_tag)
+
+
+
+
+
+
 MODE_TO_FUNCTION = {
     'whats-new': whats_new,
     'latest-versions': latest_versions,
     'download': download,
+    'pep': pep
 }
 
 

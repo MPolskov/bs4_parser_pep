@@ -10,7 +10,8 @@ from configs import configure_argument_parser, configure_logging
 from constants import (
     BASE_DIR,
     MAIN_DOC_URL,
-    PEP_URL
+    PEP_URL,
+    EXPECTED_STATUS
 )
 from outputs import control_output
 from utils import get_response, find_tag, find_status
@@ -32,7 +33,7 @@ def whats_new(session):
         'li', attrs={'class': 'toctree-l1'}
     )
 
-    results = [('Ссылка на статью', 'Заголовок', 'Редактор, автор')]
+    results = [('Ссылка на статью', 'Заголовок', 'Редактор, Автор')]
     for section in tqdm(sections_by_python):
         version_a_tag = section.find('a')
         version_link = urljoin(whats_new_url, version_a_tag['href'])
@@ -87,7 +88,11 @@ def download(session):
 
     main_tag = find_tag(soup, 'div', {'role': 'main'})
     table_tag = find_tag(main_tag, 'table', {'class': 'docutils'})
-    pdf_a4_tag = find_tag(table_tag, 'a', {'href': re.compile(r'.+pdf-a4\.zip$')})
+    pdf_a4_tag = find_tag(
+        table_tag,
+        'a',
+        {'href': re.compile(r'.+pdf-a4\.zip$')}
+    )
     pdf_a4_link = pdf_a4_tag['href']
     archive_url = urljoin(downloads_url, pdf_a4_link)
     filename = archive_url.split('/')[-1]
@@ -100,27 +105,16 @@ def download(session):
     logging.info(f'Архив был загружен и сохранён: {archive_path}')
 
 
-EXPECTED_STATUS = {
-    'A': ('Active', 'Accepted'),
-    'D': ('Deferred',),
-    'F': ('Final',),
-    'P': ('Provisional',),
-    'R': ('Rejected',),
-    'S': ('Superseded',),
-    'W': ('Withdrawn',),
-    '': ('Draft', 'Active'),
-}
-
-
 def pep(session):
     response = get_response(session, PEP_URL)
     if response is None:
         return
     status_count = {}
+    results = [('Статус', 'Количество')]
     soup = BeautifulSoup(response.text, 'lxml')
     section_tag = find_tag(soup, 'section', {'id': 'index-by-category'})
     tr_tag_list = section_tag.find_all('tr')
-    for tag in tr_tag_list:
+    for tag in tqdm(tr_tag_list):
         short_type_status = tag.find('td')
         if short_type_status is None:
             continue
@@ -142,18 +136,12 @@ def pep(session):
         else:
             status_count[status] += 1
 
-    for key, value in status_count.items():
-        logging.info(f'{key} - {value}')
-    logging.info(f'Всего PEP: {sum(status_count.values())}')
+    for key, value in tqdm(status_count.items()):
+        results.append((str(key), str(value)))
+    pep_count = sum(status_count.values())
+    results.append(('Total', str(pep_count)))
 
-
-
-
-    # logging.info(tr_tag)
-
-
-
-
+    return results
 
 
 MODE_TO_FUNCTION = {
@@ -180,7 +168,6 @@ def main():
     results = MODE_TO_FUNCTION[parser_mode](session)
 
     if results is not None:
-        # передаём их в функцию вывода вместе с аргументами командной строки.
         control_output(results, args)
     logging.info('Парсер завершил работу.')
 

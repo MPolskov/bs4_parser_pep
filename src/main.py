@@ -5,7 +5,6 @@ from tqdm import tqdm
 import re
 import logging
 
-
 from configs import configure_argument_parser, configure_logging
 from constants import (
     BASE_DIR,
@@ -18,6 +17,9 @@ from utils import get_response, find_tag, find_status
 
 
 def whats_new(session):
+    """Парсер страницы с новостями Python.
+    Вывод: Ссылка на статью, заголовок статьи, автор.
+    """
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
     response = get_response(session, whats_new_url)
     if response is None:
@@ -52,6 +54,9 @@ def whats_new(session):
 
 
 def latest_versions(session):
+    """Парсер информации о версиях python.
+    Вывод: Ссылка на документацию, версия python, статус.
+    """
     response = get_response(session, MAIN_DOC_URL)
     if response is None:
         return
@@ -80,6 +85,9 @@ def latest_versions(session):
 
 
 def download(session):
+    """Парсер для скачивания документации python.
+    Вывод: zip-архив с PDF файлом.
+    """
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
     response = get_response(session, downloads_url)
     if response is None:
@@ -106,6 +114,9 @@ def download(session):
 
 
 def pep(session):
+    """Парсер страницы с перечнем всех PEP.
+    Вывод: количество PEP в каждом статусе и общее количество PEP.
+    """
     response = get_response(session, PEP_URL)
     if response is None:
         return

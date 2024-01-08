@@ -161,6 +161,10 @@ def pep(session):
 
     logging.error('\n'.join(errors))
 
+    # results.extend(status_count.items()) - так пробовал, но
+    # при вызове с агруменом --output pretty парсер падает с исключением:
+    # "RecursionError: maximum recursion depth exceeded while
+    # calling a Python object".
     results.extend([(str(k), int(v)) for k, v in status_count.items()])
     pep_count = sum(status_count.values())
     results.append(('Total', str(pep_count)))

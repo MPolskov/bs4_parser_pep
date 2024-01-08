@@ -1,9 +1,7 @@
 import logging
-# import re
 from exceptions import ParserFindTagException
 
 from requests import RequestException
-# from bs4 import BeautifulSoup
 
 
 def get_response(session, url):

@@ -1,9 +1,12 @@
+import re
+import logging
+from collections import defaultdict
+
 from urllib.parse import urljoin
 import requests_cache
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-import re
-import logging
+
 
 from configs import configure_argument_parser, configure_logging
 from constants import (
@@ -13,7 +16,7 @@ from constants import (
     EXPECTED_STATUS
 )
 from outputs import control_output
-from utils import get_response, find_tag, find_status
+from utils import get_response, find_tag
 
 
 def whats_new(session):
@@ -37,7 +40,7 @@ def whats_new(session):
 
     results = [('Ссылка на статью', 'Заголовок', 'Редактор, Автор')]
     for section in tqdm(sections_by_python):
-        version_a_tag = section.find('a')
+        version_a_tag = find_tag(section, 'a')
         version_link = urljoin(whats_new_url, version_a_tag['href'])
         response = get_response(session, version_link)
         if response is None:
@@ -70,8 +73,8 @@ def latest_versions(session):
         if 'All versions' in ul.text:
             a_tags = ul.find_all('a')
             break
-        else:
-            raise Exception('Ничего не нашлось')
+    else:
+        raise Exception('Ничего не нашлось')
     for a_tag in a_tags:
         link = urljoin(MAIN_DOC_URL, a_tag['href'])
         search = re.search(pattern, a_tag.text)
@@ -107,7 +110,7 @@ def download(session):
     downloads_dir = BASE_DIR / 'downloads'
     downloads_dir.mkdir(exist_ok=True)
     archive_path = downloads_dir / filename
-    response = session.get(archive_url)
+    response = get_response(session, archive_url)
     with open(archive_path, 'wb') as file:
         file.write(response.content)
     logging.info(f'Архив был загружен и сохранён: {archive_path}')
@@ -120,21 +123,33 @@ def pep(session):
     response = get_response(session, PEP_URL)
     if response is None:
         return
-    status_count = {}
+    status_count = defaultdict(int)
     results = [('Статус', 'Количество')]
     soup = BeautifulSoup(response.text, 'lxml')
     section_tag = find_tag(soup, 'section', {'id': 'index-by-category'})
     tr_tag_list = section_tag.find_all('tr')
+    errors = []
     for tag in tqdm(tr_tag_list):
-        short_type_status = tag.find('td')
+        short_type_status = find_tag(tag, 'td', exeption=False)
         if short_type_status is None:
             continue
         short_status = short_type_status.text[1:]
-        short_link = tag.find('a')['href']
+        short_link = find_tag(tag, 'a')['href']
         full_link = urljoin(PEP_URL, short_link)
-        status = find_status(session, full_link)
+        response = get_response(session, full_link)
+        if response is None:
+            errors.append(f'Не удалось загрузить страницу {full_link}')
+            continue
+        soup = BeautifulSoup(response.text, 'lxml')
+        table = find_tag(soup, 'dl', {'class': 'rfc2822 field-list simple'})
+        if table is None:
+            errors.append(f'{full_link} - не найдена таблица с данными.')
+        dt_tag_status = table.find(string=re.compile('Status')).parent
+        if dt_tag_status is None:
+            errors.append(f'{full_link} - не найдена строка со статусом.')
+        status = dt_tag_status.find_next_sibling().string
         if status not in EXPECTED_STATUS[short_status]:
-            logging.error(
+            errors.append(
                 (
                     'Несовподающие статусы:\n'
                     f'{full_link}\n'
@@ -142,13 +157,11 @@ def pep(session):
                     f'Ожижаемый статус: {EXPECTED_STATUS[short_status]}'
                 )
             )
-        if status not in status_count.keys():
-            status_count[status] = 1
-        else:
-            status_count[status] += 1
+        status_count[status] += 1
 
-    for key, value in tqdm(status_count.items()):
-        results.append((str(key), str(value)))
+    logging.error('\n'.join(errors))
+
+    results.extend([(str(k), int(v)) for k, v in status_count.items()])
     pep_count = sum(status_count.values())
     results.append(('Total', str(pep_count)))
 

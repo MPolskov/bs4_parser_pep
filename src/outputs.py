@@ -1,6 +1,7 @@
 import csv
 import logging
 import datetime as dt
+
 from prettytable import PrettyTable
 
 from constants import BASE_DIR, DATETIME_FORMAT
